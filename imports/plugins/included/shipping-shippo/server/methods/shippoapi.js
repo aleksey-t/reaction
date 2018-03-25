@@ -96,6 +96,35 @@ ShippoApi.methods.getCarrierAccountsList = new ValidatedMethod({
  * Creates a Shippo's Shipment object for the given addresses and gets Rates for the particular shipment)
  * @see https://goshippo.com/docs/reference#shipments-create
  * @param {Object} parameter - ValidatedMethod's parameter
+ * @param {Object} parameter.address - The address to validate
+ * @param {String} parameter.apiKey - The Test or Live Token required
+ * for authentication by Shippo's api
+ * @return {Object} result.validation_results - The validation results from Shippo
+ * */
+ShippoApi.methods.validateAddress = new ValidatedMethod({
+  name: "ShippoApi.methods.validateAddress",
+  validate: new SimpleSchema({
+    address: purchaseAddressSchema,
+    apiKey: String
+  }).validator(),
+  run({ address, apiKey }) {
+    const shippo = new Shippo(apiKey);
+
+    const validateAddress = Meteor.wrapAsync(shippo.address.create, shippo.address);
+
+    try {
+      return validateAddress(address);
+    } catch (error) {
+      Logger.error(error);
+      throw new Meteor.Error("shippo-api-error", error.message);
+    }
+  }
+});
+
+/**
+ * Creates a Shippo's Shipment object for the given addresses and gets Rates for the particular shipment)
+ * @see https://goshippo.com/docs/reference#shipments-create
+ * @param {Object} parameter - ValidatedMethod's parameter
  * @param {Object} parameter.shippoAddressFrom - The address of the sender
  * @param {Object} parameter.shippoAddressTo - The address of the receiver
  * @param {Object} parameter.shippoParcel - The parcel dimensions's/weight

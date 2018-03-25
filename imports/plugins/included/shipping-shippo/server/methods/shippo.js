@@ -3,7 +3,7 @@ import _ from "lodash";
 import { Meteor } from "meteor/meteor";
 import { check, Match } from "meteor/check";
 import { Roles } from "meteor/alanning:roles";
-import { Reaction, Hooks } from "/server/api";
+import { Reaction, Hooks, Logger } from "/server/api";
 import { Packages, Accounts, Shops, Shipping, Cart, Orders } from "/lib/collections";
 import { ShippoPackageConfig } from "../../lib/collections/schemas";
 import { shippingRoles } from "../lib/roles";
@@ -348,6 +348,65 @@ export const methods = {
     });
 
     return updatingResult;
+  },
+
+  /**
+   * Formats and sends a cart address to Shippo to for validation
+   * @param {String} cartId - The id of the cart to get the address from
+   * @return {Object} result - The validation result from Shippo
+   */
+  "shippo/validateCartAddress"(cartId) {
+    check(cartId, String);
+
+    const cart = Cart.findOne(cartId);
+
+    // check if cart exists and if it belongs to the current user
+    if (!cart || cart.userId !== this.userId) {
+      const msg = "Error. Your cart is either undefined or has the wrong userId.";
+      Logger.error(msg);
+      throw new Meteor.Error("address-validation-error", msg);
+    }
+
+    const apiKey = getApiKey(cart.shopId);
+
+    // If for a weird reason Shop hasn't a Shippo Api key anymore return no-rates.
+    if (!apiKey) {
+      const msg = "No Shippo API key was found.";
+      Logger.error(msg);
+      throw new Meteor.Error("shippo-api-error", msg);
+    }
+
+    const buyer = Accounts.findOne({ _id: this.userId }, { fields: { emails: 1 } });
+
+    // check that there is address available in cart
+    if (!cart.shipping || !cart.shipping[0] || !cart.shipping[0].address) {
+      const msg = "The 'shipping' property of this cart is either missing or incomplete.";
+      Logger.error(msg);
+      throw new Meteor.Error("address-validation-error", msg);
+    }
+
+    const shop = Shops.findOne({ _id: cart.shopId }, { fields: { emails: 1 } });
+
+    // TODO take a more elegant approach to guest checkout -> no email address
+    let email = shop.emails[0].address || "noreply@localhost";
+
+    if (buyer.emails.length > 0) {
+      if (buyer.emails[0].address) {
+        email = buyer.emails[0].address;
+      }
+    }
+
+    // format the address for Shippo
+    const address = createShippoAddress(cart.shipping[0].address, email, "QUOTE");
+    // make sure we mark this as an address validation for the Shippo API
+    address.validate = true;
+
+    try {
+      return ShippoApi.methods.validateAddress.call({ address, apiKey });
+    } catch (error) {
+      Logger.error(error);
+      throw new Meteor.Error("shippo-api-error", error.message);
+    }
   },
 
   /**
