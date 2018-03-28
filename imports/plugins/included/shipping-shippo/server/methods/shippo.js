@@ -369,14 +369,14 @@ export const methods = {
 
     const apiKey = getApiKey(cart.shopId);
 
-    // If for a weird reason Shop hasn't a Shippo Api key anymore return no-rates.
     if (!apiKey) {
       const msg = "No Shippo API key was found.";
       Logger.error(msg);
       throw new Meteor.Error("shippo-api-error", msg);
     }
 
-    const buyer = Accounts.findOne({ _id: this.userId }, { fields: { emails: 1 } });
+    // get the buyer's email
+    const buyer = Accounts.findOne({ _id: cart.userId }, { fields: { emails: 1 } });
 
     // check that there is address available in cart
     if (!cart.shipping || !cart.shipping[0] || !cart.shipping[0].address) {
